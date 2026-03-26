@@ -1,0 +1,38 @@
+## .NET
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+.vs/
+*.nupkg
+*.snupkg
+*.nuspec
+
+## Publish / Deploy
+publish/
+PublishProfiles/
+
+## Secrets — never commit real config
+appsettings.json
+!appsettings.Example.json
+appsettings.Development.json
+appsettings.Production.json
+secrets.json
+*.pfx
+*.key
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Rider / VS Code
+.idea/
+.vscode/
+*.DotSettings
+
+## EF Core migrations (optional — remove if you want to commit migrations)
+# Migrations/
