@@ -1,74 +1,153 @@
-import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../core/api_client.dart';
 import '../models/booking.dart';
 import '../models/paged_result.dart';
 
-final createBookingProvider =
-    FutureProvider.family<Booking, Map<String, dynamic>>((ref, data) async {
-  final dio = ref.watch(dioProvider);
-  final response = await dio.post('/bookings', data: data);
-  return Booking.fromJson(response.data as Map<String, dynamic>);
-});
+class BookingListState {
+  const BookingListState({
+    this.bookings,
+    this.isLoading = false,
+    this.isLoadingMore = false,
+    this.errorMessage,
+    this.status,
+  });
 
-class BookingListNotifier extends StateNotifier<AsyncValue<PagedResult<Booking>>> {
-  final Dio _dio;
-  String? _statusFilter;
-  int _currentPage = 1;
+  final PagedResult<Booking>? bookings;
+  final bool isLoading;
+  final bool isLoadingMore;
+  final String? errorMessage;
+  final String? status;
 
-  BookingListNotifier(this._dio) : super(const AsyncValue.loading());
+  BookingListState copyWith({
+    PagedResult<Booking>? bookings,
+    bool? isLoading,
+    bool? isLoadingMore,
+    String? errorMessage,
+    String? status,
+    bool clearError = false,
+  }) {
+    return BookingListState(
+      bookings: bookings ?? this.bookings,
+      isLoading: isLoading ?? this.isLoading,
+      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+      errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      status: status ?? this.status,
+    );
+  }
+}
 
-  Future<void> fetchMyBookings({String? status, int page = 1, int pageSize = 10}) async {
-    _statusFilter = status;
-    _currentPage = page;
-    if (page == 1) state = const AsyncValue.loading();
+class BookingNotifier extends StateNotifier<BookingListState> {
+  BookingNotifier(this._ref) : super(const BookingListState());
+
+  final Ref _ref;
+  static const int _defaultPageSize = 10;
+
+  Future<Booking?> createBooking(String slotId, {String? note}) async {
+    final response = await _ref.read(dioProvider).post(
+          '/bookings',
+          data: {
+            'slotId': slotId,
+            if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+          },
+        );
+    return Booking.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<void> fetchMyBookings({
+    String? status,
+    int page = 1,
+    int pageSize = _defaultPageSize,
+  }) async {
+    state = state.copyWith(
+      isLoading: page == 1,
+      isLoadingMore: page > 1,
+      status: status,
+      clearError: true,
+    );
+
     try {
-      final params = <String, dynamic>{'page': page, 'pageSize': pageSize};
-      if (status != null) params['status'] = status;
-      final response = await _dio.get('/bookings/my', queryParameters: params);
-      final result = PagedResult.fromJson(
+      final queryParameters = <String, dynamic>{
+        'status': status,
+        'page': page,
+        'pageSize': pageSize,
+      }..removeWhere((key, value) => value == null);
+
+      final response = await _ref.read(dioProvider).get(
+            '/bookings/my',
+            queryParameters: queryParameters,
+          );
+      final result = PagedResult<Booking>.fromJson(
         response.data as Map<String, dynamic>,
         Booking.fromJson,
       );
-      if (page == 1) {
-        state = AsyncValue.data(result);
-      } else {
-        final prev = state.valueOrNull;
-        if (prev != null) {
-          state = AsyncValue.data(PagedResult(
-            items: [...prev.items, ...result.items],
-            totalCount: result.totalCount,
-            page: result.page,
-            pageSize: result.pageSize,
-            totalPages: result.totalPages,
-          ));
-        } else {
-          state = AsyncValue.data(result);
-        }
+
+      if (page > 1 && state.bookings != null) {
+        state = state.copyWith(
+          bookings: result.copyWith(
+            items: [...state.bookings!.items, ...result.items],
+          ),
+          isLoading: false,
+          isLoadingMore: false,
+          clearError: true,
+        );
+        return;
       }
-    } on DioException catch (e) {
-      state = AsyncValue.error(e, StackTrace.current);
+
+      state = state.copyWith(
+        bookings: result,
+        isLoading: false,
+        isLoadingMore: false,
+        clearError: true,
+      );
+    } catch (error) {
+      state = state.copyWith(
+        isLoading: false,
+        isLoadingMore: false,
+        errorMessage: extractApiError(error),
+      );
     }
   }
 
-  Future<void> loadMore({int pageSize = 10}) async {
+  Future<void> loadMore() async {
+    final current = state.bookings;
+    if (current == null ||
+        state.isLoadingMore ||
+        current.page >= current.totalPages) {
+      return;
+    }
+
     await fetchMyBookings(
-        status: _statusFilter, page: _currentPage + 1, pageSize: pageSize);
+      status: state.status,
+      page: current.page + 1,
+      pageSize: current.pageSize,
+    );
   }
 
-  Future<bool> cancelBooking(String id) async {
+  Future<Booking?> cancelBooking(String id) async {
     try {
-      await _dio.put('/bookings/$id/cancel');
-      return true;
-    } catch (_) {
-      return false;
+      final response = await _ref.read(dioProvider).put('/bookings/$id/cancel');
+      final booking = Booking.fromJson(response.data as Map<String, dynamic>);
+
+      final current = state.bookings;
+      if (current != null) {
+        final updatedItems = current.items
+            .map((item) => item.id == id ? booking : item)
+            .toList();
+        state = state.copyWith(
+          bookings: current.copyWith(items: updatedItems),
+          clearError: true,
+        );
+      }
+      return booking;
+    } catch (error) {
+      state = state.copyWith(errorMessage: extractApiError(error));
+      return null;
     }
   }
 }
 
-final bookingListProvider =
-    StateNotifierProvider<BookingListNotifier, AsyncValue<PagedResult<Booking>>>(
-        (ref) {
-  final dio = ref.watch(dioProvider);
-  return BookingListNotifier(dio);
+final bookingProvider =
+    StateNotifierProvider<BookingNotifier, BookingListState>((ref) {
+  return BookingNotifier(ref);
 });

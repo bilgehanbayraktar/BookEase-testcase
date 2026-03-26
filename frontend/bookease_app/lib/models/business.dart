@@ -1,13 +1,13 @@
 class BusinessOwner {
-  final String id;
-  final String fullName;
-  final String email;
-
   const BusinessOwner({
     required this.id,
     required this.fullName,
     required this.email,
   });
+
+  final String id;
+  final String fullName;
+  final String email;
 
   factory BusinessOwner.fromJson(Map<String, dynamic> json) => BusinessOwner(
         id: json['id'] as String,
@@ -17,6 +17,16 @@ class BusinessOwner {
 }
 
 class Business {
+  const Business({
+    required this.id,
+    required this.name,
+    required this.category,
+    required this.description,
+    required this.isActive,
+    required this.createdAt,
+    required this.owner,
+  });
+
   final String id;
   final String name;
   final String category;
@@ -24,16 +34,6 @@ class Business {
   final bool isActive;
   final String createdAt;
   final BusinessOwner owner;
-
-  const Business({
-    required this.id,
-    required this.name,
-    required this.category,
-    this.description,
-    required this.isActive,
-    required this.createdAt,
-    required this.owner,
-  });
 
   factory Business.fromJson(Map<String, dynamic> json) => Business(
         id: json['id'] as String,

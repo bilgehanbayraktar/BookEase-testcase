@@ -7,27 +7,18 @@ import '../providers/owner_provider.dart';
 import '../widgets/booking_card.dart';
 import '../widgets/role_based_bottom_nav.dart';
 
-class BusinessBookingsScreen extends ConsumerWidget {
-  const BusinessBookingsScreen({
-    super.key,
-    required this.businessId,
-    this.showBottomNav = true,
-    this.title = 'Gelen Rezervasyonlar',
-  });
-
-  final String businessId;
-  final bool showBottomNav;
-  final String title;
+class OwnerBookingsScreen extends ConsumerWidget {
+  const OwnerBookingsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final bookingsAsync = ref.watch(businessBookingsProvider(businessId));
+    final bookingsAsync = ref.watch(ownerAllBookingsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      appBar: AppBar(title: const Text('Gelen Rezervasyonlar')),
       body: bookingsAsync.when(
         data: (bookings) => RefreshIndicator(
-          onRefresh: () async => ref.invalidate(businessBookingsProvider(businessId)),
+          onRefresh: () async => ref.invalidate(ownerAllBookingsProvider),
           child: bookings.isEmpty
               ? ListView(
                   children: const [
@@ -66,8 +57,7 @@ class BusinessBookingsScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stackTrace) => Center(child: Text(extractApiError(error))),
       ),
-      bottomNavigationBar:
-          showBottomNav ? const RoleBasedBottomNav(currentPath: '/owner-bookings') : null,
+      bottomNavigationBar: const RoleBasedBottomNav(currentPath: '/owner-bookings'),
     );
   }
 
@@ -83,8 +73,8 @@ class BusinessBookingsScreen extends ConsumerWidget {
       } else {
         await ref.read(ownerActionsProvider).cancelBooking(booking.id);
       }
-      ref.invalidate(businessBookingsProvider(businessId));
       ref.invalidate(ownerAllBookingsProvider);
+      ref.invalidate(myBusinessesProvider);
     } catch (error) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

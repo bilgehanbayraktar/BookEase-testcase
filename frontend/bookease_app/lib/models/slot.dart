@@ -1,14 +1,4 @@
 class Slot {
-  final String id;
-  final String serviceId;
-  final String serviceName;
-  final String startTime;
-  final String endTime;
-  final int currentBookings;
-  final int capacity;
-  final bool isAvailable;
-  final bool isActive;
-
   const Slot({
     required this.id,
     required this.serviceId,
@@ -20,6 +10,16 @@ class Slot {
     required this.isAvailable,
     required this.isActive,
   });
+
+  final String id;
+  final String serviceId;
+  final String serviceName;
+  final String startTime;
+  final String endTime;
+  final int currentBookings;
+  final int capacity;
+  final bool isAvailable;
+  final bool isActive;
 
   factory Slot.fromJson(Map<String, dynamic> json) => Slot(
         id: json['id'] as String,

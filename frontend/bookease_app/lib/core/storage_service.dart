@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -13,7 +14,7 @@ class StorageService {
       : _storage = const FlutterSecureStorage(
           webOptions: WebOptions(
             dbName: 'bookease_secure',
-            publicKey: 'bookease_pk',
+            publicKey: 'bookease_public_key',
           ),
         );
 
@@ -23,6 +24,7 @@ class StorageService {
   }
 
   Future<String?> getAccessToken() => _storage.read(key: _accessTokenKey);
+
   Future<String?> getRefreshToken() => _storage.read(key: _refreshTokenKey);
 
   Future<void> clearTokens() async {
@@ -37,9 +39,13 @@ class StorageService {
 
   Future<Map<String, dynamic>?> getUser() async {
     final raw = await _storage.read(key: _userKey);
-    if (raw == null) return null;
+    if (raw == null) {
+      return null;
+    }
+
     return jsonDecode(raw) as Map<String, dynamic>;
   }
 }
 
-final storageServiceProvider = Provider<StorageService>((ref) => StorageService());
+final storageServiceProvider =
+    Provider<StorageService>((ref) => StorageService());

@@ -1,12 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
 import '../models/booking.dart';
 
 class BookingCard extends StatelessWidget {
-  final Booking booking;
-  final VoidCallback? onCancel;
+  const BookingCard({
+    super.key,
+    required this.booking,
+    this.showCustomerName = false,
+    this.onConfirm,
+    this.onCancel,
+  });
 
-  const BookingCard({super.key, required this.booking, this.onCancel});
+  final Booking booking;
+  final bool showCustomerName;
+  final VoidCallback? onConfirm;
+  final VoidCallback? onCancel;
 
   Color _statusColor() {
     switch (booking.status) {
@@ -30,25 +39,21 @@ class BookingCard extends StatelessWidget {
     }
   }
 
-  String _formatDateRange() {
-    final start = DateTime.parse(booking.slotStartTime).toLocal();
-    final end = DateTime.parse(booking.slotEndTime).toLocal();
-    final dateFmt = DateFormat('d MMMM yyyy', 'tr_TR');
-    final timeFmt = DateFormat('HH:mm');
-    return '${dateFmt.format(start)}, ${timeFmt.format(start)} - ${timeFmt.format(end)}';
-  }
-
   @override
   Widget build(BuildContext context) {
+    final start = DateTime.parse(booking.slotStartTime).toLocal();
+    final end = DateTime.parse(booking.slotEndTime).toLocal();
     final statusColor = _statusColor();
+
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
                   child: Column(
@@ -56,65 +61,64 @@ class BookingCard extends StatelessWidget {
                     children: [
                       Text(
                         booking.serviceName,
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleMedium
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                      Text(
-                        booking.businessName,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color:
-                                  Theme.of(context).colorScheme.onSurfaceVariant,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
                             ),
                       ),
+                      const SizedBox(height: 4),
+                      Text(booking.businessName),
                     ],
                   ),
                 ),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(12),
+                    color: statusColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
                     _statusLabel(),
-                    style: TextStyle(
-                        color: statusColor,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12),
+                    style: TextStyle(color: statusColor),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.schedule, size: 16),
-                const SizedBox(width: 4),
-                Text(_formatDateRange(),
-                    style: Theme.of(context).textTheme.bodySmall),
-              ],
+            const SizedBox(height: 12),
+            Text(
+              '${DateFormat('d MMMM yyyy', 'tr_TR').format(start)}, ${DateFormat('HH:mm').format(start)} - ${DateFormat('HH:mm').format(end)}',
             ),
-            if (booking.note != null && booking.note!.isNotEmpty) ...[
-              const SizedBox(height: 6),
+            if (showCustomerName) ...[
+              const SizedBox(height: 8),
+              Text('Musteri: ${booking.customerName}'),
+            ],
+            if ((booking.note ?? '').trim().isNotEmpty) ...[
+              const SizedBox(height: 8),
               Text(
                 booking.note!,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      fontStyle: FontStyle.italic,
-                      color: Theme.of(context).colorScheme.outline,
-                    ),
+                style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
-            if (booking.status != 'Cancelled') ...[
+            if (onConfirm != null || onCancel != null) ...[
               const SizedBox(height: 8),
               Align(
                 alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: onCancel,
-                  style: TextButton.styleFrom(foregroundColor: Colors.red),
-                  child: const Text('İptal Et'),
+                child: Wrap(
+                  spacing: 8,
+                  children: [
+                    if (onConfirm != null)
+                      TextButton(
+                        onPressed: onConfirm,
+                        child: const Text('Onayla'),
+                      ),
+                    if (onCancel != null)
+                      TextButton(
+                        onPressed: onCancel,
+                        child: const Text('Iptal Et'),
+                      ),
+                  ],
                 ),
               ),
             ],

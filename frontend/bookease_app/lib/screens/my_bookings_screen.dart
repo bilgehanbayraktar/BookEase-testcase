@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../providers/booking_provider.dart';
 import '../widgets/booking_card.dart';
+import '../widgets/role_based_bottom_nav.dart';
 
 class MyBookingsScreen extends ConsumerStatefulWidget {
   const MyBookingsScreen({super.key});
@@ -11,111 +13,148 @@ class MyBookingsScreen extends ConsumerStatefulWidget {
 }
 
 class _MyBookingsScreenState extends ConsumerState<MyBookingsScreen> {
-  String? _statusFilter;
-
-  static const _filters = [
-    (label: 'Tümü', value: null),
-    (label: 'Bekleyen', value: 'Pending'),
-    (label: 'Onaylı', value: 'Confirmed'),
-    (label: 'İptal', value: 'Cancelled'),
-  ];
+  String? _selectedStatus;
 
   @override
   void initState() {
     super.initState();
-    _loadBookings();
+    Future.microtask(() {
+      ref.read(bookingProvider.notifier).fetchMyBookings();
+    });
   }
 
-  void _loadBookings() {
-    Future.microtask(() => ref
-        .read(bookingListProvider.notifier)
-        .fetchMyBookings(status: _statusFilter));
-  }
-
-  Future<void> _cancelBooking(String id) async {
-    final ok =
-        await ref.read(bookingListProvider.notifier).cancelBooking(id);
-    if (ok && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Rezervasyon iptal edildi')),
-      );
-      _loadBookings();
-    }
+  Future<void> _load(String? status) async {
+    _selectedStatus = status;
+    await ref.read(bookingProvider.notifier).fetchMyBookings(status: status);
   }
 
   @override
   Widget build(BuildContext context) {
-    final bookingsState = ref.watch(bookingListProvider);
+    final bookingState = ref.watch(bookingProvider);
+    final result = bookingState.bookings;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Rezervasyonlarım'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('Rezervasyonlarım')),
       body: Column(
         children: [
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
-              children: _filters.map((filter) {
-                final selected = _statusFilter == filter.value;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: FilterChip(
-                    label: Text(filter.label),
-                    selected: selected,
-                    onSelected: (_) {
-                      setState(() => _statusFilter = filter.value);
-                      _loadBookings();
-                    },
-                  ),
-                );
-              }).toList(),
+              children: [
+                _StatusChip(
+                  label: 'Tümü',
+                  selected: _selectedStatus == null,
+                  onSelected: () => _load(null),
+                ),
+                _StatusChip(
+                  label: 'Bekleyen',
+                  selected: _selectedStatus == 'Pending',
+                  onSelected: () => _load('Pending'),
+                ),
+                _StatusChip(
+                  label: 'Onaylı',
+                  selected: _selectedStatus == 'Confirmed',
+                  onSelected: () => _load('Confirmed'),
+                ),
+                _StatusChip(
+                  label: 'İptal',
+                  selected: _selectedStatus == 'Cancelled',
+                  onSelected: () => _load('Cancelled'),
+                ),
+              ],
             ),
           ),
-          const Divider(height: 1),
           Expanded(
-            child: bookingsState.when(
-              loading: () =>
-                  const Center(child: CircularProgressIndicator()),
-              error: (e, _) => const Center(
-                  child: Text('Rezervasyonlar yüklenemedi')),
-              data: (paged) => paged.items.isEmpty
-                  ? const Center(
-                      child: Text('Rezervasyon bulunamadı',
-                          style: TextStyle(fontSize: 16)))
-                  : RefreshIndicator(
-                      onRefresh: () async => _loadBookings(),
-                      child: ListView.builder(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        itemCount: paged.items.length +
-                            (paged.page < paged.totalPages ? 1 : 0),
-                        itemBuilder: (context, index) {
-                          if (index == paged.items.length) {
-                            return Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: ElevatedButton(
-                                onPressed: () => ref
-                                    .read(bookingListProvider.notifier)
-                                    .loadMore(),
-                                child: const Text('Daha fazla yükle'),
+            child: bookingState.isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : bookingState.errorMessage != null && result == null
+                    ? Center(child: Text(bookingState.errorMessage!))
+                    : RefreshIndicator(
+                        onRefresh: () => _load(_selectedStatus),
+                        child: ListView(
+                          padding: const EdgeInsets.all(16),
+                          children: [
+                            if (result == null || result.items.isEmpty)
+                              const Padding(
+                                padding: EdgeInsets.only(top: 120),
+                                child: Center(
+                                  child: Text('Rezervasyon bulunmuyor'),
+                                ),
                               ),
-                            );
-                          }
-                          final booking = paged.items[index];
-                          return BookingCard(
-                            booking: booking,
-                            onCancel: booking.status == 'Cancelled'
-                                ? null
-                                : () => _cancelBooking(booking.id),
-                          );
-                        },
+                            if (result != null)
+                              for (final booking in result.items)
+                                BookingCard(
+                                  booking: booking,
+                                  onCancel: booking.status != 'Cancelled'
+                                      ? () async {
+                                          final messenger =
+                                              ScaffoldMessenger.of(context);
+                                          final cancelled = await ref
+                                              .read(bookingProvider.notifier)
+                                              .cancelBooking(booking.id);
+                                          if (cancelled != null && mounted) {
+                                            messenger.showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                  'Rezervasyon iptal edildi',
+                                                ),
+                                              ),
+                                            );
+                                          }
+                                        }
+                                      : null,
+                                ),
+                            if (bookingState.isLoadingMore)
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 16),
+                                child: Center(
+                                  child: CircularProgressIndicator(),
+                                ),
+                              ),
+                            if (result != null &&
+                                result.totalPages > result.page &&
+                                !bookingState.isLoadingMore)
+                              Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 16),
+                                child: OutlinedButton(
+                                  onPressed: () => ref
+                                      .read(bookingProvider.notifier)
+                                      .loadMore(),
+                                  child: const Text('Daha fazla yükle'),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
-                    ),
-            ),
           ),
         ],
+      ),
+      bottomNavigationBar: const RoleBasedBottomNav(currentPath: '/bookings'),
+    );
+  }
+}
+
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({
+    required this.label,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: FilterChip(
+        label: Text(label),
+        selected: selected,
+        onSelected: (_) => onSelected(),
       ),
     );
   }

@@ -1,67 +1,45 @@
 import 'package:flutter/material.dart';
+
 import '../models/business.dart';
 
 class BusinessCard extends StatelessWidget {
+  const BusinessCard({
+    super.key,
+    required this.business,
+    required this.onTap,
+  });
+
   final Business business;
   final VoidCallback onTap;
 
-  const BusinessCard({super.key, required this.business, required this.onTap});
-
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
         onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      business.name,
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(fontWeight: FontWeight.bold),
+              Text(
+                business.name,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
                     ),
-                  ),
-                  Chip(
-                    label: Text(
-                      business.category,
-                      style: TextStyle(
-                          fontSize: 12, color: colorScheme.onPrimary),
-                    ),
-                    backgroundColor: colorScheme.primary,
-                    padding: EdgeInsets.zero,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                ],
               ),
-              if (business.description != null &&
-                  business.description!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Chip(label: Text(business.category)),
+              if ((business.description ?? '').trim().isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Text(
                   business.description!,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
                 ),
               ],
-              const SizedBox(height: 8),
-              Text(
-                business.owner.fullName,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: colorScheme.outline,
-                    ),
-              ),
             ],
           ),
         ),

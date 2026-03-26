@@ -1,34 +1,41 @@
-import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+
 import '../core/api_client.dart';
 import '../models/slot.dart';
 
-class SlotParams {
+class SlotQuery {
+  const SlotQuery({
+    required this.serviceId,
+    required this.date,
+  });
+
   final String serviceId;
-  final String? date;
+  final DateTime date;
 
-  const SlotParams({required this.serviceId, this.date});
-
-  @override
-  bool operator ==(Object other) =>
-      other is SlotParams &&
-      other.serviceId == serviceId &&
-      other.date == date;
+  String get formattedDate => DateFormat('yyyy-MM-dd').format(date);
 
   @override
-  int get hashCode => Object.hash(serviceId, date);
+  bool operator ==(Object other) {
+    return other is SlotQuery &&
+        other.serviceId == serviceId &&
+        other.formattedDate == formattedDate;
+  }
+
+  @override
+  int get hashCode => Object.hash(serviceId, formattedDate);
 }
 
-final slotProvider =
-    FutureProvider.family<List<Slot>, SlotParams>((ref, params) async {
-  final dio = ref.watch(dioProvider);
-  final queryParams = <String, dynamic>{};
-  if (params.date != null) queryParams['date'] = params.date;
-  final response = await dio.get(
-    '/services/${params.serviceId}/slots',
-    queryParameters: queryParams.isNotEmpty ? queryParams : null,
-  );
-  return (response.data as List<dynamic>)
-      .map((e) => Slot.fromJson(e as Map<String, dynamic>))
+final selectedSlotProvider = StateProvider<Slot?>((ref) => null);
+
+final slotsProvider =
+    FutureProvider.family<List<Slot>, SlotQuery>((ref, query) async {
+  final response = await ref.read(dioProvider).get(
+        '/services/${query.serviceId}/slots',
+        queryParameters: {'date': query.formattedDate},
+      );
+  final data = response.data as List<dynamic>;
+  return data
+      .map((item) => Slot.fromJson(item as Map<String, dynamic>))
       .toList();
 });

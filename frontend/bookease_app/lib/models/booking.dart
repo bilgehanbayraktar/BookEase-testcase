@@ -1,4 +1,19 @@
 class Booking {
+  const Booking({
+    required this.id,
+    required this.slotId,
+    required this.slotStartTime,
+    required this.slotEndTime,
+    required this.serviceName,
+    required this.businessName,
+    required this.customerName,
+    required this.customerEmail,
+    required this.status,
+    required this.note,
+    required this.createdAt,
+    required this.cancelledAt,
+  });
+
   final String id;
   final String slotId;
   final String slotStartTime;
@@ -11,21 +26,6 @@ class Booking {
   final String? note;
   final String createdAt;
   final String? cancelledAt;
-
-  const Booking({
-    required this.id,
-    required this.slotId,
-    required this.slotStartTime,
-    required this.slotEndTime,
-    required this.serviceName,
-    required this.businessName,
-    required this.customerName,
-    required this.customerEmail,
-    required this.status,
-    this.note,
-    required this.createdAt,
-    this.cancelledAt,
-  });
 
   factory Booking.fromJson(Map<String, dynamic> json) => Booking(
         id: json['id'] as String,

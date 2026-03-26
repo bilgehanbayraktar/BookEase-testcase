@@ -1,11 +1,4 @@
 class ServiceModel {
-  final String id;
-  final String name;
-  final int durationMinutes;
-  final double price;
-  final int capacity;
-  final bool isActive;
-
   const ServiceModel({
     required this.id,
     required this.name,
@@ -14,6 +7,13 @@ class ServiceModel {
     required this.capacity,
     required this.isActive,
   });
+
+  final String id;
+  final String name;
+  final int durationMinutes;
+  final double price;
+  final int capacity;
+  final bool isActive;
 
   factory ServiceModel.fromJson(Map<String, dynamic> json) => ServiceModel(
         id: json['id'] as String,

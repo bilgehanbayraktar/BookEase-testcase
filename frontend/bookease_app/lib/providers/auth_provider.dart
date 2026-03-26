@@ -1,128 +1,155 @@
-import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../core/api_client.dart';
-import '../core/storage_service.dart';
 import '../models/auth_response.dart';
 import '../models/user.dart';
 
 class AuthState {
-  final bool isLoggedIn;
-  final AuthUser? currentUser;
-  final bool isLoading;
-  final String? errorMessage;
-
   const AuthState({
     this.isLoggedIn = false,
     this.currentUser,
     this.isLoading = false,
     this.errorMessage,
+    this.didInitialize = false,
   });
+
+  final bool isLoggedIn;
+  final AuthUser? currentUser;
+  final bool isLoading;
+  final String? errorMessage;
+  final bool didInitialize;
 
   AuthState copyWith({
     bool? isLoggedIn,
     AuthUser? currentUser,
     bool? isLoading,
     String? errorMessage,
+    bool? didInitialize,
     bool clearError = false,
     bool clearUser = false,
-  }) =>
-      AuthState(
-        isLoggedIn: isLoggedIn ?? this.isLoggedIn,
-        currentUser: clearUser ? null : (currentUser ?? this.currentUser),
-        isLoading: isLoading ?? this.isLoading,
-        errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
-      );
+  }) {
+    return AuthState(
+      isLoggedIn: isLoggedIn ?? this.isLoggedIn,
+      currentUser: clearUser ? null : (currentUser ?? this.currentUser),
+      isLoading: isLoading ?? this.isLoading,
+      errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      didInitialize: didInitialize ?? this.didInitialize,
+    );
+  }
 }
 
 class AuthNotifier extends StateNotifier<AuthState> {
-  final Dio _dio;
-  final StorageService _storage;
+  AuthNotifier(
+    this._ref,
+    this._sessionManager,
+  ) : super(
+          AuthState(
+            isLoggedIn: _sessionManager.isLoggedIn,
+            currentUser: _sessionManager.currentUser,
+          ),
+        ) {
+    _sessionListener = () {
+      state = state.copyWith(
+        isLoggedIn: _sessionManager.isLoggedIn,
+        currentUser: _sessionManager.currentUser,
+        isLoading: false,
+        didInitialize: true,
+        clearError: true,
+        clearUser: _sessionManager.currentUser == null,
+      );
+    };
+    _sessionManager.addListener(_sessionListener);
+  }
 
-  AuthNotifier(this._dio, this._storage) : super(const AuthState());
+  final Ref _ref;
+  final SessionManager _sessionManager;
+  late final VoidCallback _sessionListener;
+
+  @override
+  void dispose() {
+    _sessionManager.removeListener(_sessionListener);
+    super.dispose();
+  }
 
   Future<void> checkAuth() async {
-    final token = await _storage.getAccessToken();
-    final userMap = await _storage.getUser();
-    if (token != null && userMap != null) {
-      state = state.copyWith(
-        isLoggedIn: true,
-        currentUser: AuthUser.fromJson(userMap),
-      );
-    }
+    await _sessionManager.hydrate();
+    state = state.copyWith(
+      isLoggedIn: _sessionManager.isLoggedIn,
+      currentUser: _sessionManager.currentUser,
+      isLoading: false,
+      didInitialize: true,
+      clearError: true,
+      clearUser: _sessionManager.currentUser == null,
+    );
   }
 
   Future<AuthResponse?> login(String email, String password) async {
     state = state.copyWith(isLoading: true, clearError: true);
+
     try {
-      final response = await _dio.post(
-        '/auth/login',
-        data: {'email': email, 'password': password},
+      final response = await _ref.read(dioProvider).post(
+            '/auth/login',
+            data: {'email': email, 'password': password},
+          );
+      final authResponse = AuthResponse.fromJson(
+        response.data as Map<String, dynamic>,
       );
-      final auth = AuthResponse.fromJson(response.data as Map<String, dynamic>);
-      await _storage.saveTokens(auth.accessToken, auth.refreshToken);
-      await _storage.saveUser(auth.user.toJson());
-      state = state.copyWith(
-        isLoggedIn: true,
-        currentUser: auth.user,
-        isLoading: false,
-      );
-      return auth;
-    } on DioException catch (e) {
+      await _sessionManager.setSession(authResponse);
+      return authResponse;
+    } catch (error) {
       state = state.copyWith(
         isLoading: false,
-        errorMessage: _parseError(e),
+        errorMessage: extractApiError(error),
+        didInitialize: true,
       );
       return null;
     }
   }
 
   Future<AuthResponse?> register(
-      String email, String password, String fullName, String role) async {
+    String email,
+    String password,
+    String fullName,
+    String role,
+  ) async {
     state = state.copyWith(isLoading: true, clearError: true);
+
     try {
-      final response = await _dio.post(
-        '/auth/register',
-        data: {
-          'email': email,
-          'password': password,
-          'fullName': fullName,
-          'role': role,
-        },
+      final response = await _ref.read(dioProvider).post(
+            '/auth/register',
+            data: {
+              'email': email,
+              'password': password,
+              'fullName': fullName,
+              'role': role,
+            },
+          );
+      final authResponse = AuthResponse.fromJson(
+        response.data as Map<String, dynamic>,
       );
-      final auth = AuthResponse.fromJson(response.data as Map<String, dynamic>);
-      await _storage.saveTokens(auth.accessToken, auth.refreshToken);
-      await _storage.saveUser(auth.user.toJson());
-      state = state.copyWith(
-        isLoggedIn: true,
-        currentUser: auth.user,
-        isLoading: false,
-      );
-      return auth;
-    } on DioException catch (e) {
+      await _sessionManager.setSession(authResponse);
+      return authResponse;
+    } catch (error) {
       state = state.copyWith(
         isLoading: false,
-        errorMessage: _parseError(e),
+        errorMessage: extractApiError(error),
+        didInitialize: true,
       );
       return null;
     }
   }
 
   Future<void> logout() async {
-    await _storage.clearTokens();
-    state = const AuthState();
-  }
-
-  String _parseError(DioException e) {
-    final data = e.response?.data;
-    if (data is Map && data['message'] != null) {
-      return data['message'] as String;
-    }
-    return 'Bir hata oluştu. Lütfen tekrar deneyin.';
+    state = state.copyWith(isLoading: true, clearError: true);
+    await _sessionManager.clearSession();
+    state = const AuthState(didInitialize: true);
   }
 }
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  final dio = ref.watch(dioProvider);
-  final storage = ref.watch(storageServiceProvider);
-  return AuthNotifier(dio, storage);
+  return AuthNotifier(
+    ref,
+    ref.watch(sessionManagerProvider),
+  );
 });

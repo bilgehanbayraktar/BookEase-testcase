@@ -1,14 +1,21 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+
 import '../core/api_client.dart';
 import '../models/slot.dart';
+import '../providers/booking_provider.dart';
+import '../providers/slot_provider.dart';
 
 class CreateBookingScreen extends ConsumerStatefulWidget {
-  final Slot slot;
+  const CreateBookingScreen({
+    super.key,
+    required this.slotId,
+  });
 
-  const CreateBookingScreen({super.key, required this.slot});
+  final String? slotId;
 
   @override
   ConsumerState<CreateBookingScreen> createState() =>
@@ -16,138 +23,151 @@ class CreateBookingScreen extends ConsumerStatefulWidget {
 }
 
 class _CreateBookingScreenState extends ConsumerState<CreateBookingScreen> {
-  final _noteCtrl = TextEditingController();
-  bool _isLoading = false;
+  final _noteController = TextEditingController();
+  bool _isSubmitting = false;
   String? _errorMessage;
 
   @override
   void dispose() {
-    _noteCtrl.dispose();
+    _noteController.dispose();
     super.dispose();
   }
 
-  String _formatSlotTime() {
-    final start = DateTime.parse(widget.slot.startTime).toLocal();
-    final end = DateTime.parse(widget.slot.endTime).toLocal();
-    final dateFmt = DateFormat('d MMMM yyyy', 'tr_TR');
-    final timeFmt = DateFormat('HH:mm');
-    return '${dateFmt.format(start)}, ${timeFmt.format(start)} - ${timeFmt.format(end)}';
-  }
-
   Future<void> _submit() async {
+    final slotId = widget.slotId;
+    if (slotId == null || slotId.isEmpty) {
+      setState(() => _errorMessage = 'Geçerli bir slot seçilmedi');
+      return;
+    }
+
     setState(() {
-      _isLoading = true;
+      _isSubmitting = true;
       _errorMessage = null;
     });
+
     try {
-      final dio = ref.read(dioProvider);
-      final note = _noteCtrl.text.trim();
-      await dio.post('/bookings', data: {
-        'slotId': widget.slot.id,
-        if (note.isNotEmpty) 'note': note,
+      final booking = await ref.read(bookingProvider.notifier).createBooking(
+            slotId,
+            note: _noteController.text,
+          );
+      if (booking == null || !mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Rezervasyon oluşturuldu!')),
+      );
+      context.go('/bookings');
+    } on DioException catch (error) {
+      setState(() {
+        _errorMessage = error.response?.statusCode == 409
+            ? 'Seçilen slot dolu.'
+            : extractApiError(error);
       });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Rezervasyon oluşturuldu!')),
-        );
-        context.go('/bookings');
-      }
-    } catch (e) {
-      String msg = 'Bir hata oluştu.';
-      if (e.toString().contains('409')) {
-        msg = 'Bu slot doldu. Lütfen başka bir slot seçin.';
-      }
-      setState(() => _errorMessage = msg);
+    } catch (error) {
+      setState(() => _errorMessage = extractApiError(error));
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final selectedSlot = ref.watch(selectedSlotProvider);
+    final effectiveSlot = selectedSlot?.id == widget.slotId ? selectedSlot : null;
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Rezervasyon Yap'),
-        centerTitle: true,
-      ),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.slot.serviceName,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleLarge
-                              ?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            const Icon(Icons.schedule, size: 18),
-                            const SizedBox(width: 6),
-                            Text(_formatSlotTime()),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            const Icon(Icons.people_outline, size: 18),
-                            const SizedBox(width: 6),
-                            Text(
-                                '${widget.slot.currentBookings}/${widget.slot.capacity} rezervasyon'),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                TextFormField(
-                  controller: _noteCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Notunuz (opsiyonel)',
-                    border: OutlineInputBorder(),
-                    alignLabelWithHint: true,
-                  ),
-                  maxLines: 3,
-                ),
-                const SizedBox(height: 24),
-                if (_errorMessage != null) ...[
-                  Text(
-                    _errorMessage!,
-                    style: const TextStyle(color: Colors.red),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _submit,
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Rezervasyon Yap'),
-                ),
-              ],
+      appBar: AppBar(title: const Text('Rezervasyon Yap')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _SlotSummaryCard(slot: effectiveSlot, slotId: widget.slotId),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _noteController,
+            maxLines: 4,
+            decoration: const InputDecoration(
+              labelText: 'Notunuz (opsiyonel)',
+              hintText: 'Notunuz (opsiyonel)',
+              alignLabelWithHint: true,
             ),
           ),
-        ),
+          if (_errorMessage != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              _errorMessage!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ],
+          const SizedBox(height: 20),
+          ElevatedButton(
+            onPressed: _isSubmitting ? null : _submit,
+            child: _isSubmitting
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Rezervasyon Yap'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SlotSummaryCard extends StatelessWidget {
+  const _SlotSummaryCard({
+    required this.slot,
+    required this.slotId,
+  });
+
+  final Slot? slot;
+  final String? slotId;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: slot == null
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Slot Özeti',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text('Slot ID: ${slotId ?? '-'}'),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Bu ekranda slot özeti, listeden gelen seçim bilgisiyle gösterilir.',
+                  ),
+                ],
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    slot!.serviceName,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    DateFormat('d MMMM yyyy', 'tr_TR')
+                        .format(DateTime.parse(slot!.startTime).toLocal()),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${DateFormat('HH:mm').format(DateTime.parse(slot!.startTime).toLocal())} - ${DateFormat('HH:mm').format(DateTime.parse(slot!.endTime).toLocal())}',
+                  ),
+                  const SizedBox(height: 4),
+                  Text('${slot!.currentBookings}/${slot!.capacity} rezervasyon'),
+                ],
+              ),
       ),
     );
   }

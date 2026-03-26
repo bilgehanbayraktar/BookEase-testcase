@@ -3,16 +3,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/api_client.dart';
-import '../providers/owner_provider.dart';
+import '../providers/admin_provider.dart';
+import '../providers/business_provider.dart';
 import '../widgets/business_card.dart';
 import '../widgets/role_based_bottom_nav.dart';
 
-class MyBusinessesScreen extends ConsumerWidget {
-  const MyBusinessesScreen({super.key});
+class AdminBusinessesScreen extends ConsumerWidget {
+  const AdminBusinessesScreen({super.key});
 
-  Future<void> _showCreateBusinessDialog(BuildContext context, WidgetRef ref) async {
+  Future<void> _showCreateBusinessDialog(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
     final nameController = TextEditingController();
     final categoryController = TextEditingController();
+    final ownerIdController = TextEditingController();
     final descriptionController = TextEditingController();
     String? errorMessage;
     bool isSaving = false;
@@ -36,6 +41,14 @@ class MyBusinessesScreen extends ConsumerWidget {
                     TextField(
                       controller: categoryController,
                       decoration: const InputDecoration(labelText: 'Kategori'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: ownerIdController,
+                      decoration: const InputDecoration(
+                        labelText: 'BusinessOwner ID',
+                        hintText: 'Olusturulan owner kullanicisinin ID degeri',
+                      ),
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -67,13 +80,17 @@ class MyBusinessesScreen extends ConsumerWidget {
                             errorMessage = null;
                           });
                           try {
-                            await ref.read(ownerActionsProvider).createBusiness(
+                            await ref.read(adminActionsProvider).createBusiness(
                                   name: nameController.text.trim(),
                                   category: categoryController.text.trim(),
+                                  ownerId: ownerIdController.text.trim(),
                                   description: descriptionController.text.trim(),
                                 );
                             if (context.mounted) {
                               Navigator.of(context).pop();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Isletme olusturuldu')),
+                              );
                             }
                           } catch (error) {
                             setState(() => errorMessage = extractApiError(error));
@@ -101,41 +118,34 @@ class MyBusinessesScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final myBusinessesAsync = ref.watch(myBusinessesProvider);
+    final businessesAsync = ref.watch(businessListProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Isletmelerim')),
-      body: myBusinessesAsync.when(
+      appBar: AppBar(title: const Text('Tum Isletmeleri Yonet')),
+      body: businessesAsync.when(
         data: (businesses) => RefreshIndicator(
-          onRefresh: () async => ref.invalidate(myBusinessesProvider),
-          child: businesses.isEmpty
-              ? ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: const [
-                    SizedBox(height: 240),
-                    Center(child: Text('Henuz isletmeniz bulunmuyor')),
-                  ],
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: businesses.length,
-                  itemBuilder: (context, index) {
-                    final business = businesses[index];
-                    return BusinessCard(
-                      business: business,
-                      onTap: () => context.go('/my-businesses/${business.id}'),
-                    );
-                  },
-                ),
+          onRefresh: () async => ref.invalidate(businessListProvider),
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: businesses.length,
+            itemBuilder: (context, index) {
+              final business = businesses[index];
+              return BusinessCard(
+                business: business,
+                onTap: () => context.go('/admin/businesses/${business.id}/manage'),
+              );
+            },
+          ),
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stackTrace) => Center(child: Text(extractApiError(error))),
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showCreateBusinessDialog(context, ref),
-        child: const Icon(Icons.add),
+        icon: const Icon(Icons.add_business),
+        label: const Text('Isletme Olustur'),
       ),
-      bottomNavigationBar: const RoleBasedBottomNav(currentPath: '/my-businesses'),
+      bottomNavigationBar: const RoleBasedBottomNav(currentPath: '/admin/businesses'),
     );
   }
 }
